@@ -1,0 +1,46 @@
+version: 2
+updates:
+  - package-ecosystem: "nuget"
+    directory: "/VGSilos"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    # Match the repo's conventional-commits style: "chore(deps): bump X from Y to Z".
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      bepinex:
+        patterns:
+          - "BepInEx.*"
+    ignore:
+      # Pinned to the game's Unity runtime — bumping would desync stubs.
+      - dependency-name: "UnityEngine.Modules"
+      # BepInEx 6 is a separate major branch with a different plugin API.
+      # Stay on the 5.x stable line until there's a deliberate migration.
+      - dependency-name: "BepInEx.Core"
+        update-types: ["version-update:semver-major"]
+      # Pinned to 2.10.x: BepInEx 5 ships HarmonyX 2.10 at runtime; 2.16+
+      # adds a MonoMod.Backports dependency that isn't on the load path,
+      # causing FileNotFoundException at plugin startup. Unpin once
+      # BepInEx 5 bumps its bundled HarmonyX or we commit to shipping
+      # the MonoMod runtime DLLs alongside the plugin.
+      - dependency-name: "HarmonyX"
+      # Newtonsoft.Json comes from the game's Mono runtime (compile-only
+      # NuGet reference). Bumping the compile-time version against a
+      # runtime that doesn't match risks Mono VTable faults — see the
+      # comment on Newtonsoft.Json in VGSilos.csproj.
+      - dependency-name: "Newtonsoft.Json"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      actions:
+        patterns:
+          - "*"
