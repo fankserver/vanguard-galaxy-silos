@@ -1,4 +1,4 @@
-# Vanguard Galaxy Silos (VGSilos)
+# Silos (VGSilos)
 
 A BepInEx plugin for [Vanguard Galaxy](https://store.steampowered.com/app/3471800/) that adds per-material storage caps to the refined-material system and a station-anchored silo network for growing them. Vanilla refined storage is a single uncapped float per material — this plugin turns that into a progression axis you build out by crafting and installing silos at space stations.
 
@@ -22,7 +22,7 @@ A BepInEx plugin for [Vanguard Galaxy](https://store.steampowered.com/app/347180
    ```
 5. **Launch the game.** Open the BepInEx console — you should see a load line ending with the number of Harmony patches applied, e.g.:
    ```
-   [Info :Vanguard Galaxy Silos] Vanguard Galaxy Silos v0.1.0 loaded (N patches)
+   [Info :Silos] Silos v0.1.0 loaded (N patches)
    ```
 
 ## Uninstall

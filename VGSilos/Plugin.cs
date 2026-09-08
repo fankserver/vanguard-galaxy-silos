@@ -13,7 +13,7 @@ namespace VGSilos;
 public class Plugin : BaseUnityPlugin
 {
     public const string PluginGuid = "vgsilos";
-    public const string PluginName = "Vanguard Galaxy Silos";
+    public const string PluginName = "Silos";
     public const string PluginVersion = "0.1.0";
 
     internal static Plugin Instance { get; private set; } = null!;
