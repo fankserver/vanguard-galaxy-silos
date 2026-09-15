@@ -6,28 +6,30 @@ A BepInEx plugin for [Vanguard Galaxy](https://store.steampowered.com/app/347180
 - **Crafted silo items** — 26 forge recipes: 2 universal silos × 2 tiers and 8 material-specific silos × 3 tiers. Universal silos add a small cap to every material; specialized silos add a much larger cap to one. Recipe costs scale with tier (Mk3 needs Astatine).
 - **Silo bay stations** — only some refinery stations have silo mounts (seeded per-station, ~60% of refinery stations). Mount counts vary 1–3, also seeded. The map tooltip on a station shows `Silo Bay (n/m)` and the silos installed there.
 - **Install via Use** — craft a silo, dock at a silo-capable station, click Use on the silo in your inventory. Same UX as using a refined-material pack.
-- **Existing-save safe** — never modifies the vanilla `.save` file. Silo state lives in a sidecar JSON next to the save (`Saves/vgsilos.{name}.json`). Uninstalling the mod leaves vanilla saves intact; reinstalling restores silo state on next load.
+- **Existing-save safe** — never modifies the vanilla `.save` file. Silo progression is stored by the [VGModAPI](https://github.com/fankserver/vanguard-galaxy-api) SaveData service, keyed to each save generation (requires VGModAPI ≥ 0.2.8 installed). If you played an older Silos preview, its sidecar `Saves/vgsilos.{name}.json` is imported once on first load and left untouched. Uninstalling the mod leaves vanilla saves intact; reinstalling restores silo state on next load.
 
 ## Install
 
 1. **Install BepInEx 5.x** — grab `BepInEx_win_x64_5.4.x.zip` from the [BepInEx releases](https://github.com/BepInEx/BepInEx/releases) and unzip it into your Vanguard Galaxy install folder (next to `VanguardGalaxy.exe`).
-2. **Launch the game once** so BepInEx creates its `BepInEx/plugins/` and `BepInEx/config/` subfolders, then close the game.
-3. **Download the VGSilos release** zip from [Releases](https://github.com/fank/vanguard-galaxy-silos/releases).
-4. **Unzip** into `BepInEx/plugins/`. The zip contains a single `VGSilos/` folder that drops in cleanly:
+2. **Install [VGModAPI](https://github.com/fankserver/vanguard-galaxy-api/releases) ≥ 0.2.8** — Silos stores its progression through the API's SaveData service and will stay disabled at startup (with a clear BepInEx log line) if the API is missing or its persistence service refuses registration. Nothing is ever written to your vanilla saves either way.
+3. **Launch the game once** so BepInEx creates its `BepInEx/plugins/` and `BepInEx/config/` subfolders, then close the game.
+4. **Download the VGSilos release** zip from [Releases](https://github.com/fank/vanguard-galaxy-silos/releases).
+5. **Unzip** into `BepInEx/plugins/`. The zip contains a single `VGSilos/` folder that drops in cleanly:
    ```
    VanguardGalaxy/BepInEx/plugins/
      VGSilos/
        VGSilos.dll
+       Newtonsoft.Json.dll
        README.md
    ```
-5. **Launch the game.** Open the BepInEx console — you should see a load line ending with the number of Harmony patches applied, e.g.:
+6. **Launch the game.** Open the BepInEx console — you should see a load line ending with the number of Harmony patches applied, e.g.:
    ```
    [Info :Silos] Silos v0.1.0 loaded (N patches)
    ```
 
 ## Uninstall
 
-Delete the `BepInEx/plugins/VGSilos/` folder. The vanilla `.save` files were never touched, so they keep working unmodified — your refined-material counters revert to the vanilla uncapped behaviour. The mod's sidecar JSONs at `Saves/vgsilos.*.json` can be deleted at your leisure or left in place (a future reinstall picks them back up).
+Delete the `BepInEx/plugins/VGSilos/` folder. The vanilla `.save` files were never touched, so they keep working unmodified — your refined-material counters revert to the vanilla uncapped behaviour. API-managed silo data is simply ignored once the mod is gone; a future reinstall picks it back up. Any pre-migration sidecar JSONs at `Saves/vgsilos.*.json` can be deleted at your leisure.
 
 ## How to use
 

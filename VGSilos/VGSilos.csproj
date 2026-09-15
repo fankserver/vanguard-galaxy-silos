@@ -8,6 +8,14 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <RootNamespace>VGSilos</RootNamespace>
+    <!-- Release-blocker fix: game 0.8.1 removed Newtonsoft.Json.dll from
+         Managed/ (confirmed) — other mods merely happen to carry copies.
+         VGSilos must be standalone, so Newtonsoft ships in our deploy output
+         (the sidecar/import codec needs it live). The compile-only assets on
+         everything else below stay strict: the package tests assert our
+         output DLL set is exactly {VGSilos.dll, Newtonsoft.Json.dll}, so a
+         stray BepInEx/Harmony/Unity copy fails the build gate. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <RestoreAdditionalProjectSources>
       https://api.nuget.org/v3/index.json;
       https://nuget.bepinex.dev/v3/index.json;
@@ -17,16 +25,18 @@
 
   <ItemGroup>
     <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
-    <PackageReference Include="BepInEx.Core" Version="5.*" />
-    <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
+    <PackageReference Include="BepInEx.Core" Version="5.*" IncludeAssets="compile" />
+    <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" IncludeAssets="compile" />
     <PackageReference Include="UnityEngine.Modules" Version="6000.2.6" IncludeAssets="compile" />
     <!-- Pinned to 2.10.x: BepInEx 5 ships HarmonyX 2.10, and 2.16+ adds a
          transitive MonoMod.Backports dep that BepInEx 5 doesn't load at
          runtime. See VGEcho.csproj for the full rationale. -->
-    <PackageReference Include="HarmonyX" Version="2.10.*" />
-    <!-- Newtonsoft.Json: sidecar JSON persistence. The game ships its own
-         copy in Managed/, so compile-only — don't redistribute. -->
-    <PackageReference Include="Newtonsoft.Json" Version="13.*" IncludeAssets="compile" />
+    <PackageReference Include="HarmonyX" Version="2.10.*" IncludeAssets="compile" />
+    <!-- Newtonsoft.Json: sidecar/import JSON persistence. SHIPS with the
+         plugin (game 0.8.1 Managed/ no longer provides it — see the
+         CopyLocalLockFileAssemblies note above); deployed beside VGSilos.dll
+         by `make deploy`. -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" IncludeAssets="compile;runtime" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,6 +52,18 @@
       <HintPath>lib/Unity.TextMeshPro.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- VGModAPI contract assembly: compile-time only. The game's BepInEx
+         plugins folder ships VGModAPI.dll (which carries the abstractions),
+         and the [BepInDependency] on vgmodapi enforces load order. Mirrors
+         the VGMissionJournal pattern — symlinked by `make link-api`. -->
+    <Reference Include="VGModAPI.Abstractions">
+      <HintPath>lib/VGModAPI.Abstractions.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="VGSilos.Tests" />
   </ItemGroup>
 
 </Project>

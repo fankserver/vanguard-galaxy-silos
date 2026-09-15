@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <!-- CI/dev boxes may only carry a newer shared runtime (e.g. .NET 10);
+         let the testhost roll forward instead of pinning net8 down. -->
+    <RollForward>Major</RollForward>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>VGSilos.Tests</RootNamespace>
+    <!-- Referencing VGSilos.csproj transitively pulls BepInEx.Core etc. from
+         nuget.bepinex.dev; the Microsoft.NET.Test.Sdk + xunit packages live on
+         nuget.org. Include both so restore works from either direction. -->
+    <RestoreAdditionalProjectSources>
+      https://api.nuget.org/v3/index.json;
+      https://nuget.bepinex.dev/v3/index.json;
+    </RestoreAdditionalProjectSources>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+    <PackageReference Include="xunit" Version="2.*" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.*" />
+    <!-- RefinedMaterial (the vanilla enum inside InstalledSilo) surfaces in
+         test payloads, so Unity's reference assemblies must be available for
+         the CLR to resolve game types during JIT. -->
+    <PackageReference Include="UnityEngine.Modules" Version="6000.2.6" />
+    <!-- VGSilos marks BepInEx.Core and HarmonyX compile-only (the game
+         provides them). xUnit needs them at runtime: SiloRegistry takes a
+         BepInEx ManualLogSource. -->
+    <PackageReference Include="BepInEx.BaseLib" Version="5.*" />
+    <PackageReference Include="HarmonyX" Version="2.10.*" />
+    <!-- Compile-only in VGSilos; the codec round-trip tests need it live. -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VGSilos\VGSilos.csproj" />
+    <!-- The SaveData contract (PersistenceProvider, ISaveDataService,
+         SaveDataRegistrationResult) must be loadable at test runtime; the
+         plugin references it Private=false, so copy it here. Shares the
+         symlinked sibling build via `make link-api`. -->
+    <Reference Include="VGModAPI.Abstractions">
+      <HintPath>..\VGSilos\lib\VGModAPI.Abstractions.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <!-- Game stub (symlinked by `make link-asm`) so xUnit can JIT the
+         vanilla RefinedMaterial enum inside captured silo state.
+         Conditional so a not-yet-linked checkout still restores. -->
+    <Reference Include="Assembly-CSharp" Condition="Exists('..\VGSilos\lib\Assembly-CSharp.dll')">
+      <HintPath>..\VGSilos\lib\Assembly-CSharp.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

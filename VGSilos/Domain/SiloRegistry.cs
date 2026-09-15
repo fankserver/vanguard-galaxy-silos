@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using BepInEx.Logging;
@@ -10,7 +11,7 @@ namespace VGSilos.Domain;
 /// Central in-memory model for all silo state. Single source of truth for:
 /// per-material global cap, per-station installation lists, mount counts,
 /// and silo-bay availability per station. Persistence is handled by
-/// <see cref="SiloPersistence"/>; this class is pure logic.
+/// <see cref="SiloSaveDataProvider"/>; this class is pure logic.
 /// </summary>
 internal sealed class SiloRegistry
 {
@@ -26,6 +27,17 @@ internal sealed class SiloRegistry
 
     private string? _firstDockedStationGuid;
     private string? _currentSaveName;
+
+    /// <summary>
+    /// Live durable-persistence gate consulted by every progression mutation
+    /// (<see cref="TryInstall"/> / <see cref="TryUninstall"/>). Plugin wires
+    /// this to the SaveData registration's <c>CanMutate</c>; when persistence
+    /// is blocked (restore refused, save in flight, provider removed) the
+    /// mod must not hand out progression that would evaporate on the next
+    /// load without a word. Defaults to allow so Domain stays unit-testable
+    /// without an API registration.
+    /// </summary>
+    internal Func<bool> MutationAllowed { get; set; } = () => true;
 
     public SiloRegistry(ManualLogSource log, float availabilityChance)
     {
@@ -152,6 +164,11 @@ internal sealed class SiloRegistry
 
     public bool TryInstall(SpaceStation station, InstalledSilo silo)
     {
+        if (!MutationAllowed())
+        {
+            _log.LogWarning("Install refused: silo persistence is not currently writable (blocked or save in flight). Nothing was consumed.");
+            return false;
+        }
         var record = GetStation(station);
         if (record == null)
         {
@@ -174,6 +191,11 @@ internal sealed class SiloRegistry
     /// </summary>
     public InstalledSilo? TryUninstall(SpaceStation station, int slotIndex)
     {
+        if (!MutationAllowed())
+        {
+            _log.LogWarning("Uninstall refused: silo persistence is not currently writable (blocked or save in flight). Nothing was refunded.");
+            return null;
+        }
         var record = GetStation(station);
         if (record == null || slotIndex < 0 || slotIndex >= record.Installed.Count)
             return null;
@@ -243,7 +265,7 @@ internal sealed class SiloRegistry
         _firstDockedStationGuid = null;
     }
 
-    /// <summary>For SiloPersistence to populate after JSON load.</summary>
+    /// <summary>Populates state from decoded sidecar JSON (API payload or one-time legacy import).</summary>
     public void LoadStationsRaw(IReadOnlyDictionary<string, StationSilos> stations)
     {
         _stations.Clear();
@@ -251,7 +273,7 @@ internal sealed class SiloRegistry
             _stations[kv.Key] = kv.Value;
     }
 
-    /// <summary>For SiloPersistence to snapshot before JSON save.</summary>
+    /// <summary>Snapshot consumed by the SaveData provider capture.</summary>
     public IReadOnlyDictionary<string, StationSilos> SnapshotStations() =>
         _stations.ToDictionary(kv => kv.Key, kv => kv.Value);
 }
