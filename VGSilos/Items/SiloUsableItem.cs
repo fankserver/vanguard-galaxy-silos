@@ -55,6 +55,16 @@ internal class SiloUsableItem : UsableItem
         var registry = Plugin.Instance?.Registry;
         if (registry == null) return false;
 
+        // Fail-closed UX: while durable persistence is blocked (restore
+        // refused, provider removed) or a save is in flight, refuse the
+        // install with a visible reason — item stays unconsumed — instead of
+        // granting progression that can never be captured.
+        if (!registry.MutationAllowed())
+        {
+            Notify("@SiloPersistBlocked", "Silo persistence unavailable — installs are disabled until saving recovers (see the BepInEx log).");
+            return false;
+        }
+
         if (!registry.IsSiloCapable(station))
         {
             Notify("@SiloNotCapable", $"{station.name} has no silo bay.");

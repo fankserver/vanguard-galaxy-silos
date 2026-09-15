@@ -64,8 +64,15 @@ internal sealed class SiloSaveDataProvider
 
     // Called by the API at save time. Any fault surfaces as an API-side
     // capture refusal (blocked provider), never as a vanilla save crash.
-    internal byte[] Capture() =>
-        SiloSidecarCodec.Encode(_registry.FirstDockedStationGuid, _registry.SnapshotStations());
+    internal byte[] Capture()
+    {
+        var bytes = SiloSidecarCodec.Encode(_registry.FirstDockedStationGuid, _registry.SnapshotStations());
+        // Soft early-warning: an oversized capture hard-blocks publication
+        // for the whole save via the API; notice a runaway state beforehand.
+        if (bytes.Length > SiloSidecarCodec.MaxPayloadBytes / 2)
+            _warn($"Silo capture is {bytes.Length} bytes — approaching the {SiloSidecarCodec.MaxPayloadBytes}-byte limit; further growth blocks saves.");
+        return bytes;
+    }
 
     internal static bool Validate(byte[] payload) => SiloSidecarCodec.IsValid(payload);
 
@@ -73,6 +80,13 @@ internal sealed class SiloSaveDataProvider
     {
         if (session == null) throw new ArgumentNullException(nameof(session));
         _registry.Clear();
+
+        // Save-name binding for the whole restore: derived from the loaded
+        // path so it never goes stale across sessions; null for new games.
+        var saveName = session.Origin == SessionOrigin.SaveLoad && session.SavePath != null
+            ? Path.GetFileNameWithoutExtension(session.SavePath)
+            : null;
+        _registry.CurrentSaveName = saveName;
 
         if (payload != null)
         {
@@ -82,15 +96,11 @@ internal sealed class SiloSaveDataProvider
             return;
         }
 
-        if (session.Origin != SessionOrigin.SaveLoad || session.SavePath == null)
+        if (saveName == null)
         {
             // New game: fresh progression, nothing to migrate.
-            _registry.CurrentSaveName = null;
             return;
         }
-
-        var saveName = Path.GetFileNameWithoutExtension(session.SavePath);
-        _registry.CurrentSaveName = saveName;
 
         var path = _legacySidecarPath(saveName);
         if (!_legacySidecarExists(path))

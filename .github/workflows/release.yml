@@ -49,6 +49,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VGAPI_VERSION=0.2.8
+          pinned=$(sed -n 's/.*\[BepInDependency(ModApi.PluginId, "\([0-9.]*\)").*/\1/p' VGSilos/Plugin.cs | head -1)
+          if [ "$pinned" != "$VGAPI_VERSION" ]; then
+            echo "::error::VGAPI_VERSION ($VGAPI_VERSION) drifts from [BepInDependency] pin ($pinned) in Plugin.cs."; exit 1
+          fi
           gh release download "v${VGAPI_VERSION}" --repo fankserver/vanguard-galaxy-api \
             -p "VGModAPI-${VGAPI_VERSION}-stable.zip" -d /tmp/vgapi
           unzip -q "/tmp/vgapi/VGModAPI-${VGAPI_VERSION}-stable.zip" \

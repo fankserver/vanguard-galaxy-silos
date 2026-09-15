@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using BepInEx.Logging;
@@ -26,6 +27,17 @@ internal sealed class SiloRegistry
 
     private string? _firstDockedStationGuid;
     private string? _currentSaveName;
+
+    /// <summary>
+    /// Live durable-persistence gate consulted by every progression mutation
+    /// (<see cref="TryInstall"/> / <see cref="TryUninstall"/>). Plugin wires
+    /// this to the SaveData registration's <c>CanMutate</c>; when persistence
+    /// is blocked (restore refused, save in flight, provider removed) the
+    /// mod must not hand out progression that would evaporate on the next
+    /// load without a word. Defaults to allow so Domain stays unit-testable
+    /// without an API registration.
+    /// </summary>
+    internal Func<bool> MutationAllowed { get; set; } = () => true;
 
     public SiloRegistry(ManualLogSource log, float availabilityChance)
     {
@@ -152,6 +164,11 @@ internal sealed class SiloRegistry
 
     public bool TryInstall(SpaceStation station, InstalledSilo silo)
     {
+        if (!MutationAllowed())
+        {
+            _log.LogWarning("Install refused: silo persistence is not currently writable (blocked or save in flight). Nothing was consumed.");
+            return false;
+        }
         var record = GetStation(station);
         if (record == null)
         {
@@ -174,6 +191,11 @@ internal sealed class SiloRegistry
     /// </summary>
     public InstalledSilo? TryUninstall(SpaceStation station, int slotIndex)
     {
+        if (!MutationAllowed())
+        {
+            _log.LogWarning("Uninstall refused: silo persistence is not currently writable (blocked or save in flight). Nothing was refunded.");
+            return null;
+        }
         var record = GetStation(station);
         if (record == null || slotIndex < 0 || slotIndex >= record.Installed.Count)
             return null;

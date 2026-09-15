@@ -96,6 +96,7 @@ public class Plugin : BaseUnityPlugin
             Log.LogError($"VGModAPI SaveData unreachable: {ex.GetType().Name}: {ex.Message}");
             Log.LogError("Silos is DISABLED for this process — no patches applied, existing data untouched. " +
                          "Check VGModAPI installation and its BepInEx log for persistence-service errors.");
+            Registry.MutationAllowed = () => false;
             return;
         }
 
@@ -104,11 +105,26 @@ public class Plugin : BaseUnityPlugin
             Log.LogError($"VGModAPI SaveData registration refused ({admissionStatus}: {admissionDetail}).");
             Log.LogError("Silos is DISABLED for this process — no patches applied, existing data untouched. " +
                          "Enable the API persistence service (vgmodapi.cfg) and check API errors.");
+            Registry.MutationAllowed = () => false;
             return;
         }
 
         Enabled = true;
         Log.LogInfo($"Silo persistence: VGModAPI SaveData provider '{SiloSaveDataProvider.Owner}' registered.");
+
+        // Route every progression mutation through the API's live action
+        // gate: blocked provider (e.g. restore refused), save in flight, or
+        // dispatch windows all refuse install/uninstall with a visible
+        // reason instead of minting uncapturable progression. StateChanged
+        // only surfaces transitions in the log; permission reads CanMutate.
+        Registry.MutationAllowed = () => _saveDataRegistration!.CanMutate;
+        _saveDataRegistration.StateChanged += state =>
+        {
+            if (state.Kind == SaveDataStateKind.Blocked)
+                Log.LogError($"Silo persistence blocked ({state.Reason}: {state.Detail}) — silo installs/uninstalls are refused until it recovers.");
+            else if (state.Kind == SaveDataStateKind.Ready)
+                Log.LogInfo("Silo persistence ready.");
+        };
 
         _harmony = new Harmony(PluginGuid);
         // PatchAll(Assembly) recurses into nested types, picking up the

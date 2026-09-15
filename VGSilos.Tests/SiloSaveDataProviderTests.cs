@@ -189,6 +189,55 @@ public sealed class SiloSaveDataProviderTests : IDisposable
     }
 
     [Fact]
+    public void ApiPayloadOnSaveLoadShortCircuitsBeforeAnyLegacyProbe()
+    {
+        // Review nit: an API payload must never consult legacy storage, even
+        // on the SaveLoad path where import would otherwise be considered.
+        var source = Registry(); Seed(source);
+        var payload = Provider(source).Capture();
+        var registry = Registry();
+        var provider = new SiloSaveDataProvider(registry, true, _ => { },
+            _ => throw new InvalidOperationException("legacy path must not be probed with an API payload"),
+            _ => throw new InvalidOperationException("legacy existence must not be checked with an API payload"),
+            _ => throw new InvalidOperationException("legacy must not be read with an API payload"));
+        provider.Restore(LoadSession("/saves/Save4.save"), payload);
+        AssertSeed(registry);
+        Assert.Equal("Save4", registry.CurrentSaveName);
+    }
+
+    [Fact]
+    public void ApiPayloadRestoresSaveNameSoItNeverGoesStaleAcrossSessions()
+    {
+        var registry = Registry();
+        var first = Provider(registry);
+        first.Restore(LoadSession("/saves/SaveB.save"), null); // no legacy on disk ⇒ fresh
+        Assert.Equal("SaveB", registry.CurrentSaveName);
+        var secondPayload = Provider(Registry()).Capture();
+        Provider(registry).Restore(LoadSession("/saves/SaveA.save"), secondPayload);
+        Assert.Equal("SaveA", registry.CurrentSaveName);
+        Provider(registry).Restore(NewGameSession(), secondPayload);
+        Assert.Null(registry.CurrentSaveName);
+    }
+
+    [Fact]
+    public void RunawayCaptureWarnsBeforeHittingTheHardLimit()
+    {
+        var registry = Registry();
+        var many = new Dictionary<string, StationSilos>();
+        for (var i = 0; i < 2000; i++)
+            many["guid-" + i] = new StationSilos
+            {
+                MaxMounts = 3,
+                Installed = { InstalledSilo.Universal(3), InstalledSilo.Specialized(RefinedMaterial.Astatine, 3) },
+            };
+        registry.LoadStationsRaw(many);
+        var warnings = new List<string>();
+        var bytes = Provider(registry, warn: warnings.Add).Capture();
+        Assert.True(bytes.Length > SiloSidecarCodec.MaxPayloadBytes / 2);
+        Assert.Contains(warnings, w => w.Contains("approaching the") && w.Contains("byte limit"));
+    }
+
+    [Fact]
     public void ProviderDeclaresCanonicalOwnerAndCurrentSchema()
     {
         var provider = Provider(Registry()).BuildProvider();
