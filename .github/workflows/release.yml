@@ -39,6 +39,27 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Fetch VGModAPI contract assembly
+        # VGSilos compiles against the VGModAPI abstractions (SaveData
+        # provider surface). Pin to the minimum supported API release — keep
+        # in step with [BepInDependency(ModApi.PluginId, ...)] in Plugin.cs.
+        # The publicized plugin zips carry VGModAPI.Abstractions.dll, which
+        # is public contract only (no game IL), safe to compile against.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VGAPI_VERSION=0.2.8
+          gh release download "v${VGAPI_VERSION}" --repo fankserver/vanguard-galaxy-api \
+            -p "VGModAPI-${VGAPI_VERSION}-stable.zip" -d /tmp/vgapi
+          unzip -q "/tmp/vgapi/VGModAPI-${VGAPI_VERSION}-stable.zip" \
+            'VGModAPI/VGModAPI.Abstractions.dll' -d /tmp/vgapi
+          path="VGSilos/lib/VGModAPI.Abstractions.dll"
+          if [ ! -s "/tmp/vgapi/VGModAPI/VGModAPI.Abstractions.dll" ]; then
+            echo "::error::$path could not be extracted from the v${VGAPI_VERSION} release asset."; exit 1
+          fi
+          cp "/tmp/vgapi/VGModAPI/VGModAPI.Abstractions.dll" "$path"
+          echo "Contract assembly: $path ($(du -h "$path" | cut -f1))"
+
       - name: Verify publicized references are committed
         run: |
           missing=0
@@ -69,11 +90,27 @@ jobs:
           mkdir -p "$PKG_DIR"
 
           cp VGSilos/bin/Debug/netstandard2.1/VGSilos.dll "$PKG_DIR/"
+          # Standalone payload: game 0.8.1 ships no Newtonsoft.Json.dll, so
+          # the plugin carries its own. Assert the exact build-output DLL
+          # set here too — a missing Newtonsoft copy or a leaked
+          # compile-only dep (BepInEx/Harmony/Unity) must fail packaging.
+          BUILD_DIR="VGSilos/bin/Debug/netstandard2.1"
+          actual=$(ls "$BUILD_DIR"/*.dll | xargs -r -n1 basename | sort | tr '\n' ',')
+          expected="Newtonsoft.Json.dll,VGSilos.dll,"
+          if [ "$actual" != "$expected" ]; then
+            echo "ERROR: build output DLL set '$actual' != expected '$expected'"; exit 1
+          fi
+          cp "$BUILD_DIR/Newtonsoft.Json.dll" "$PKG_DIR/"
+          # Same exact-set check on the staged archive contents.
+          staged=$(ls "$PKG_DIR"/*.dll | xargs -n1 basename | sort | tr '\n' ',')
+          if [ "$staged" != "$expected" ]; then
+            echo "ERROR: staged DLL set '$staged' != expected '$expected'"; exit 1
+          fi
           cp README.md "$PKG_DIR/"
           [ -f LICENSE ] && cp LICENSE "$PKG_DIR/" || true
 
           SIZE=$(du -sh "$PKG_DIR" | cut -f1)
-          echo "Staged DLL + README — $SIZE at $PKG_DIR"
+          echo "Staged DLL + Newtonsoft.Json.dll + README — $SIZE at $PKG_DIR"
 
           echo "pkg_name=${PKG_NAME}" >> "$GITHUB_OUTPUT"
 

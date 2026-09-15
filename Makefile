@@ -12,7 +12,7 @@ PLUGIN_DIR := $(GAME_DIR)/BepInEx/plugins
 # Resolve dotnet — prefer explicit local SDK, fall back to PATH
 DOTNET   ?= $(shell command -v dotnet 2>/dev/null || echo /tmp/dnsdk/dotnet/dotnet)
 
-.PHONY: all build link-asm clean deploy check-bepinex
+.PHONY: all build link-asm link-api test clean deploy check-bepinex
 
 all: build
 
@@ -41,14 +41,46 @@ link-asm:
 		echo "Linked Unity.TextMeshPro.dll" ; \
 	fi
 
-build: link-asm
+build: link-asm link-api
 	DOTNET_ROOT=$(dir $(DOTNET)) $(DOTNET) build VGSilos/VGSilos.csproj -c $(CONFIG)
+
+# Symlink the VGModAPI contract assembly for the SaveData provider.
+# Mirrors VGMissionJournal: build the sibling API repo first
+# (`make build` there) — the reference is compile-only; VGModAPI.dll
+# itself is deployed as its own plugin next to ours.
+VGAPI_DLL ?= ../vanguard-galaxy-api/VGModAPI.Abstractions/bin/Release/netstandard2.1/VGModAPI.Abstractions.dll
+
+link-api:
+	@mkdir -p VGSilos/lib
+	@if [ ! -e "VGSilos/lib/VGModAPI.Abstractions.dll" ]; then \
+		if [ ! -f "$(VGAPI_DLL)" ]; then \
+			echo "VGModAPI.Abstractions.dll not found at $(VGAPI_DLL)." ; \
+			echo "Build the sibling API repo first: (cd ../vanguard-galaxy-api && make build)" ; \
+			exit 1 ; \
+		fi ; \
+		ln -sf "$(shell cd ../vanguard-galaxy-api 2>/dev/null && pwd)/VGModAPI.Abstractions/bin/Release/netstandard2.1/VGModAPI.Abstractions.dll" VGSilos/lib/VGModAPI.Abstractions.dll ; \
+		echo "Linked VGModAPI.Abstractions.dll" ; \
+	fi
+
+test: link-asm link-api
+	DOTNET_ROOT=$(dir $(DOTNET)) $(DOTNET) test VGSilos.Tests/VGSilos.Tests.csproj
 
 deploy: build check-bepinex
 	@mkdir -p "$(PLUGIN_DIR)"
+	# Exact shipped file-set gate: the plugin must be standalone (game 0.8.1
+	# ships no Newtonsoft.Json.dll, so we carry our own) and must not leak
+	# compile-only deps. Any unexpected DLL in the build output fails deploy.
+	@unexpected=$$(ls "$(BUILDDIR)"/*.dll 2>/dev/null | xargs -r -n1 basename | grep -v -E '^(VGSilos|Newtonsoft\.Json)\.dll$$' || true); \
+	if [ -n "$$unexpected" ]; then \
+		echo "ERROR: unexpected DLLs in build output (compile-only deps leaked?):" ; \
+		echo "$$unexpected" ; exit 1 ; \
+	fi
+	@test -f "$(BUILDDIR)/Newtonsoft.Json.dll" || { \
+		echo "ERROR: $(BUILDDIR)/Newtonsoft.Json.dll missing — VGSilos must ship its own copy." ; exit 1 ; }
 	cp "$(BUILDDLL)" "$(PLUGIN_DIR)/"
+	cp "$(BUILDDIR)/Newtonsoft.Json.dll" "$(PLUGIN_DIR)/"
 	@if [ -f "$(BUILDDIR)/VGSilos.pdb" ]; then cp "$(BUILDDIR)/VGSilos.pdb" "$(PLUGIN_DIR)/"; fi
-	@echo "Deployed $(DLL) to $(PLUGIN_DIR)"
+	@echo "Deployed $(DLL) + Newtonsoft.Json.dll to $(PLUGIN_DIR)"
 
 clean:
 	$(DOTNET) clean VGSilos/VGSilos.csproj

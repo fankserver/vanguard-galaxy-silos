@@ -10,7 +10,7 @@ namespace VGSilos.Domain;
 /// Central in-memory model for all silo state. Single source of truth for:
 /// per-material global cap, per-station installation lists, mount counts,
 /// and silo-bay availability per station. Persistence is handled by
-/// <see cref="SiloPersistence"/>; this class is pure logic.
+/// <see cref="SiloSaveDataProvider"/>; this class is pure logic.
 /// </summary>
 internal sealed class SiloRegistry
 {
@@ -243,7 +243,7 @@ internal sealed class SiloRegistry
         _firstDockedStationGuid = null;
     }
 
-    /// <summary>For SiloPersistence to populate after JSON load.</summary>
+    /// <summary>Populates state from decoded sidecar JSON (API payload or one-time legacy import).</summary>
     public void LoadStationsRaw(IReadOnlyDictionary<string, StationSilos> stations)
     {
         _stations.Clear();
@@ -251,7 +251,7 @@ internal sealed class SiloRegistry
             _stations[kv.Key] = kv.Value;
     }
 
-    /// <summary>For SiloPersistence to snapshot before JSON save.</summary>
+    /// <summary>Snapshot consumed by the SaveData provider capture.</summary>
     public IReadOnlyDictionary<string, StationSilos> SnapshotStations() =>
         _stations.ToDictionary(kv => kv.Key, kv => kv.Value);
 }
